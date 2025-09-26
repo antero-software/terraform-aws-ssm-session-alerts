@@ -35,3 +35,13 @@ variable "tags" {
   type        = map(string)
   default     = {}
 }
+
+variable "lambda_memory_size" {
+  description = "Memory size (MB) for the Lambda function. CPU is proportionally allocated based on memory. Minimum is 128."
+  type        = number
+  default     = 128
+  validation {
+    condition     = var.lambda_memory_size >= 128 && var.lambda_memory_size <= 10240
+    error_message = "lambda_memory_size must be between 128 and 10240 MB."
+  }
+}

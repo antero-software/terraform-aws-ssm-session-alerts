@@ -69,6 +69,7 @@ resource "aws_lambda_function" "ssm_alerts" {
   handler       = "lambda_function.lambda_handler"
   runtime       = "python3.12"
   timeout       = 30
+  memory_size   = var.lambda_memory_size
 
   source_code_hash = data.archive_file.lambda_zip.output_base64sha256
 
