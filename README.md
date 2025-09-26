@@ -3,13 +3,13 @@ Terraform module to capture all AWS SSM Session Manager login events via CloudTr
 
 ## What this module does
 
-- Creates an EventBridge rule that listens to SSM StartSession and TerminateSession API events coming from CloudTrail.
+- Creates an EventBridge rule that listens only to SSM StartSession API events coming from CloudTrail.
 - Deploys a Python AWS Lambda function that formats the event and posts a rich message to Slack via an incoming webhook.
 - Optionally enables enhanced logging to CloudWatch Logs (enabled by default, configurable via variable).
 
 ## Architecture
 
-CloudTrail → EventBridge (rule: ssm StartSession/TerminateSession) → Lambda (Python) → Slack webhook
+CloudTrail → EventBridge (rule: ssm StartSession) → Lambda (Python) → Slack webhook
 
 Resources created by this module:
 - CloudWatch Logs log group for the Lambda
@@ -29,17 +29,17 @@ Minimal example:
 
 ```hcl
 module "ssm_session_alerts" {
-	source = "./" # or the VCS source
+  source = "./" # or the VCS source
 
-	name_prefix       = "ssm-alerts"TF_
-	slack_webhook_url = var.slack_webhook_url
-	# Optional
-	slack_channel     = "#security-alerts"
-	enable_logging    = true
-	log_retention_days = 30
-	tags = {
-		Project = "ssm-session-alerts"
-	}
+  name_prefix        = "ssm-alerts"
+  slack_webhook_url  = var.slack_webhook_url
+  # Optional
+  slack_channel      = "#security-alerts"
+  enable_logging     = true
+  log_retention_days = 30
+  tags = {
+    Project = "ssm-session-alerts"
+  }
 }
 ```
 
@@ -111,7 +111,7 @@ The module matches CloudTrail events with:
 	"detail-type": ["AWS API Call via CloudTrail"],
 	"detail": {
 		"eventSource": ["ssm.amazonaws.com"],
-		"eventName": ["StartSession", "TerminateSession"]
+		"eventName": ["StartSession"]
 	}
 }
 ```
@@ -120,7 +120,7 @@ The module matches CloudTrail events with:
 
 - Ensure CloudTrail is enabled for your account/region so that SSM API calls appear as events.
 - If Slack messages do not arrive, check the Lambda’s CloudWatch logs and verify the webhook URL and (optional) channel.
-- Some SSM responses may not include a `sessionId` depending on the event; the message will still be sent with available context.
+- Some SSM responses may not include a `sessionId`; the message will still be sent with available context.
 
 ## License
 

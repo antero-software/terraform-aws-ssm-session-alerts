@@ -38,7 +38,7 @@ resource "aws_cloudwatch_event_rule" "ssm_session_events" {
     detail-type = ["AWS API Call via CloudTrail"]
     detail = {
       eventSource = ["ssm.amazonaws.com"]
-      eventName   = ["StartSession", "TerminateSession"]
+      eventName   = ["StartSession"]
     }
   })
 
