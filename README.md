@@ -80,6 +80,9 @@ terraform apply
 - `lambda_memory_size` (number, default: `128`)
 	Lambda memory size in MB. CPU scales with memory; 128MB is the minimum and uses the lowest CPU allocation (~1/8 vCPU baseline). Increase if execution time grows.
 
+- `icon_url` (string, default: empty)
+	Optional image URL shown in the Slack message (accessory). Leave empty to disable.
+
 ## Outputs
 
 - `lambda_function_name` – Name of the Lambda function

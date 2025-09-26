@@ -69,20 +69,22 @@ def to_iso8601(ts: str | None) -> str:
 
 
 def build_slack_payload(event: dict) -> dict:
+    """Build a richer Slack Block Kit payload with emojis, risk flags and quick-glance formatting."""
     detail = event.get("detail", {})
     event_name = detail.get("eventName", "UnknownEvent")
     region = detail.get("awsRegion", "-")
     event_time = to_iso8601(detail.get("eventTime"))
     source_ip = detail.get("sourceIPAddress", "-")
     user_agent = detail.get("userAgent", "-")
+    event_id = detail.get("eventID") or detail.get("eventId") or "-"
 
     user_str, user_fields = build_user_summary(detail.get("userIdentity", {}))
+    user_type = user_fields.get("UserType", "-")
 
     req = detail.get("requestParameters", {}) or {}
     resp = detail.get("responseElements", {}) or {}
-
-    # SSM specifics
-    target = req.get("target") or req.get("Target") or "-"  # EC2 instance-id if present
+    target = req.get("target") or req.get("Target") or "-"
+    doc_name = req.get("documentName") or req.get("DocumentName") or "-"
     reason = req.get("reason") or req.get("Reason") or "-"
     session_id = (
         resp.get("sessionId")
@@ -91,58 +93,72 @@ def build_slack_payload(event: dict) -> dict:
         or "-"
     )
 
-    emoji = ":large_blue_circle:" if event_name == "StartSession" else ":white_check_mark:" if event_name == "TerminateSession" else ":information_source:"
-    title = f"{emoji} SSM {event_name}"
+    # Primary emoji & accent
+    primary_emoji = ":large_blue_circle:" if event_name == "StartSession" else ":information_source:"
 
-    # Base text fallback for clients that don't render blocks
-    text_lines = [
-        f"SSM {event_name}",
-        f"User: {user_str}",
-        f"Account: {user_fields.get('Account', '-')}",
-        f"Target: {target}",
-        f"SessionId: {session_id}",
-        f"Region: {region}",
-        f"Source IP: {source_ip}",
-        f"Time: {event_time}",
+    # Risk flags
+    risk_flags = []
+    if user_type == "Root":
+        risk_flags.append(":rotating_light: *ROOT ACCOUNT* :rotating_light:")
+    if user_type == "AssumedRole" and any(x in user_str.lower() for x in ["admin", "prod", "power"]):
+        risk_flags.append(":warning: privileged role?")
+    if source_ip not in ("-", "127.0.0.1") and not source_ip.startswith("10.") and not source_ip.startswith("192.168.") and not source_ip.startswith("172.16."):
+        # simplistic external vs RFC1918 check
+        risk_flags.append(":globe_with_meridians: external IP")
+
+    # Console helper link (best-effort)
+    console_link = None
+    if event_id != "-" and region != "-":
+        console_link = f"https://{region}.console.aws.amazon.com/cloudtrail/home?region={region}#/events/{event_id}"
+
+    # Fallback text
+    fallback = f"{event_name} {user_str} -> {target} ({region}) session={session_id} doc={doc_name} ip={source_ip}"
+    if reason and reason != "-":
+        fallback += f" reason={reason}"
+
+    header_text = f"{primary_emoji} SSM {event_name}"
+
+    # Build main section with a richer single markdown block for better mobile rendering
+    summary_lines = [
+        f"*User:* {user_str}  |  *Acct:* {user_fields.get('Account', '-')}",
+        f"*Target:* `{target}`  |  *Session:* `{session_id}`",
+        f"*Doc:* `{doc_name}`  |  *Region:* {region}",
+        f"*IP:* {source_ip}",
     ]
     if reason and reason != "-":
-        text_lines.append(f"Reason: {reason}")
+        summary_lines.append(f"*Reason:* _{reason}_")
+    if risk_flags:
+        summary_lines.append("\n".join(risk_flags))
 
-    blocks = [
-        {
-            "type": "header",
-            "text": {"type": "plain_text", "text": title},
-        },
-        {
-            "type": "section",
-            "fields": [
-                {"type": "mrkdwn", "text": f"*User*\n{user_str}"},
-                {"type": "mrkdwn", "text": f"*Account*\n{user_fields.get('Account', '-')}"},
-                {"type": "mrkdwn", "text": f"*Target*\n{target}"},
-                {"type": "mrkdwn", "text": f"*Session ID*\n{session_id}"},
-                {"type": "mrkdwn", "text": f"*Region*\n{region}"},
-                {"type": "mrkdwn", "text": f"*Source IP*\n{source_ip}"},
-            ],
-        },
+    icon_url = os.environ.get("ICON_URL", "").strip()
+
+    section_block = {
+        "type": "section",
+        "text": {"type": "mrkdwn", "text": "\n".join(summary_lines)},
+    }
+    if icon_url:
+        section_block["accessory"] = {"type": "image", "image_url": icon_url, "alt_text": "icon"}
+
+    blocks: list[dict] = [
+        {"type": "header", "text": {"type": "plain_text", "text": header_text}},
+        section_block,
     ]
 
-    if reason and reason != "-":
-        blocks.append(
-            {"type": "section", "text": {"type": "mrkdwn", "text": f"*Reason*\n{reason}"}}
-        )
+    # Divider for visual separation
+    blocks.append({"type": "divider"})
 
-    blocks.append(
-        {
-            "type": "context",
-            "elements": [
-                {"type": "mrkdwn", "text": f"Time: {event_time}"},
-                {"type": "mrkdwn", "text": f"UserAgent: {user_agent}"},
-            ],
-        }
-    )
+    context_elems = [
+        {"type": "mrkdwn", "text": f"*Time:* {event_time}"},
+        {"type": "mrkdwn", "text": f"*UserType:* {user_type}"},
+        {"type": "mrkdwn", "text": f"UA: {user_agent[:60]}"},
+    ]
+    if console_link:
+        context_elems.append({"type": "mrkdwn", "text": f"<" + console_link + "|CloudTrail Event>"})
+
+    blocks.append({"type": "context", "elements": context_elems})
 
     payload: dict = {
-        "text": "\n".join(text_lines),  # fallback text
+        "text": fallback,
         "blocks": blocks,
         "unfurl_links": False,
         "unfurl_media": False,
@@ -153,7 +169,6 @@ def build_slack_payload(event: dict) -> dict:
     slack_channel = get_env("SLACK_CHANNEL", "").strip()
     if slack_channel:
         payload["channel"] = slack_channel
-
     return payload
 
 

@@ -78,6 +78,7 @@ resource "aws_lambda_function" "ssm_alerts" {
       SLACK_WEBHOOK_URL = var.slack_webhook_url
       SLACK_CHANNEL     = var.slack_channel
       ENABLE_LOGGING    = var.enable_logging ? "true" : "false"
+      ICON_URL          = var.icon_url
     }
   }
 

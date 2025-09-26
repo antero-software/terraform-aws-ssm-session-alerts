@@ -45,3 +45,9 @@ variable "lambda_memory_size" {
     error_message = "lambda_memory_size must be between 128 and 10240 MB."
   }
 }
+
+variable "icon_url" {
+  description = "Optional image URL to show as accessory in Slack message (leave empty to disable)."
+  type        = string
+  default     = ""
+}
