@@ -23,9 +23,6 @@ data "aws_region" "current" {}
 locals {
   # Lambda function name
   lambda_function_name = "${var.name_prefix}-ssm-session-alerts"
-
-  # Write the ZIP to the root workspace's .terraform directory (always present after init)
-  zip_path = "${path.root}/.terraform/${local.lambda_function_name}.zip"
 }
 
 # CloudWatch Log Group for Lambda logs
@@ -54,9 +51,11 @@ resource "aws_cloudwatch_event_rule" "ssm_session_events" {
 
 # EventBridge target to invoke the Lambda
 resource "aws_cloudwatch_event_target" "lambda_target" {
-  rule      = aws_cloudwatch_event_rule.ssm_session_events.name
-  target_id = "SSMSessionAlertsLambdaTarget"
-  arn       = aws_lambda_function.ssm_alerts.arn
+  rule       = aws_cloudwatch_event_rule.ssm_session_events.name
+  target_id  = "SSMSessionAlertsLambdaTarget"
+  arn        = aws_lambda_function.ssm_alerts.arn
+
+  depends_on = [aws_lambda_permission.allow_eventbridge]
 }
 
 # Allow EventBridge to invoke the Lambda
@@ -69,15 +68,19 @@ resource "aws_lambda_permission" "allow_eventbridge" {
 }
 
 # Lambda function (Python)
+# Lambda function (Python) - use the manually created ZIP
 resource "aws_lambda_function" "ssm_alerts" {
-  filename         = data.archive_file.lambda_zip.output_path
+  # IMPORTANT: point to your manual ZIP inside the module
+  filename         = "${path.module}/src/ssm-alerts-ssm-session-alerts.zip"
+  # Ensure updates are detected when you re-zip
+  source_code_hash = filebase64sha256("${path.module}/src/ssm-alerts-ssm-session-alerts.zip")
+
   function_name    = local.lambda_function_name
   role             = aws_iam_role.lambda_role.arn
-  handler          = "lambda_function.lambda_handler"
+  handler          = "lambda_function.lambda_handler"  # file is lambda_function.py in ZIP root
   runtime          = "python3.12"
   timeout          = 30
   memory_size      = var.lambda_memory_size
-  source_code_hash = data.archive_file.lambda_zip.output_base64sha256
 
   environment {
     variables = {
@@ -94,13 +97,6 @@ resource "aws_lambda_function" "ssm_alerts" {
   ]
 
   tags = var.tags
-}
-
-# Archive the Python sources from the module's src/ dir into a ZIP at the root .terraform dir
-data "archive_file" "lambda_zip" {
-  type        = "zip"
-  source_dir  = "${path.module}/src"
-  output_path = local.zip_path
 }
 
 # IAM role for the Lambda
