@@ -93,8 +93,8 @@ resource "aws_lambda_function" "ssm_alerts" {
 # Archive the Python script for Lambda deployment
 data "archive_file" "lambda_zip" {
   type        = "zip"
-  source_dir  = "./${path.module}/src"
-  output_path = "./${path.module}/lambda_function.zip"
+  source_dir  = "${path.module}/src"
+  output_path = "${path.module}/lambda_function.zip"
 }
 
 # IAM role for Lambda function
