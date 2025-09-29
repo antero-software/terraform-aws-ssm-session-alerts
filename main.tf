@@ -15,20 +15,27 @@ terraform {
   }
 }
 
-# Data source for current AWS caller identity
+# Data sources for current identity and region
 data "aws_caller_identity" "current" {}
-
-# Data source for current AWS region
 data "aws_region" "current" {}
 
-# CloudWatch Log Group for Lambda function logs
+# Locals
+locals {
+  # Lambda function name
+  lambda_function_name = "${var.name_prefix}-ssm-session-alerts"
+
+  # Write the ZIP to the root workspace's .terraform directory (always present after init)
+  zip_path = "${path.root}/.terraform/${local.lambda_function_name}.zip"
+}
+
+# CloudWatch Log Group for Lambda logs
 resource "aws_cloudwatch_log_group" "ssm_alerts_lambda" {
   name              = "/aws/lambda/${local.lambda_function_name}"
   retention_in_days = var.log_retention_days
   tags              = var.tags
 }
 
-# EventBridge Rule to capture SSM Session Manager events
+# EventBridge rule to capture SSM StartSession API calls (via CloudTrail)
 resource "aws_cloudwatch_event_rule" "ssm_session_events" {
   name        = "${var.name_prefix}-ssm-session-events"
   description = "Capture SSM Session Manager login events"
@@ -45,14 +52,14 @@ resource "aws_cloudwatch_event_rule" "ssm_session_events" {
   tags = var.tags
 }
 
-# EventBridge target to trigger Lambda function
+# EventBridge target to invoke the Lambda
 resource "aws_cloudwatch_event_target" "lambda_target" {
   rule      = aws_cloudwatch_event_rule.ssm_session_events.name
   target_id = "SSMSessionAlertsLambdaTarget"
   arn       = aws_lambda_function.ssm_alerts.arn
 }
 
-# Lambda permission for EventBridge to invoke the function
+# Allow EventBridge to invoke the Lambda
 resource "aws_lambda_permission" "allow_eventbridge" {
   statement_id  = "AllowExecutionFromEventBridge"
   action        = "lambda:InvokeFunction"
@@ -61,16 +68,15 @@ resource "aws_lambda_permission" "allow_eventbridge" {
   source_arn    = aws_cloudwatch_event_rule.ssm_session_events.arn
 }
 
-# Lambda function for processing SSM events and sending Slack alerts
+# Lambda function (Python)
 resource "aws_lambda_function" "ssm_alerts" {
-  filename      = data.archive_file.lambda_zip.output_path
-  function_name = local.lambda_function_name
-  role          = aws_iam_role.lambda_role.arn
-  handler       = "lambda_function.lambda_handler"
-  runtime       = "python3.12"
-  timeout       = 30
-  memory_size   = var.lambda_memory_size
-
+  filename         = data.archive_file.lambda_zip.output_path
+  function_name    = local.lambda_function_name
+  role             = aws_iam_role.lambda_role.arn
+  handler          = "lambda_function.lambda_handler"
+  runtime          = "python3.12"
+  timeout          = 30
+  memory_size      = var.lambda_memory_size
   source_code_hash = data.archive_file.lambda_zip.output_base64sha256
 
   environment {
@@ -90,14 +96,14 @@ resource "aws_lambda_function" "ssm_alerts" {
   tags = var.tags
 }
 
-# Archive the Python script for Lambda deployment
+# Archive the Python sources from the module's src/ dir into a ZIP at the root .terraform dir
 data "archive_file" "lambda_zip" {
   type        = "zip"
   source_dir  = "${path.module}/src"
-  output_path = "${path.module}/lambda_function.zip"
+  output_path = local.zip_path
 }
 
-# IAM role for Lambda function
+# IAM role for the Lambda
 resource "aws_iam_role" "lambda_role" {
   name = "${var.name_prefix}-ssm-alerts-lambda-role"
 
@@ -107,9 +113,7 @@ resource "aws_iam_role" "lambda_role" {
       {
         Action = "sts:AssumeRole"
         Effect = "Allow"
-        Principal = {
-          Service = "lambda.amazonaws.com"
-        }
+        Principal = { Service = "lambda.amazonaws.com" }
       },
     ]
   })
@@ -117,13 +121,13 @@ resource "aws_iam_role" "lambda_role" {
   tags = var.tags
 }
 
-# IAM policy for Lambda function to write logs
+# Basic logging permissions for the Lambda
 resource "aws_iam_role_policy_attachment" "lambda_logs" {
   role       = aws_iam_role.lambda_role.name
   policy_arn = "arn:aws:iam::aws:policy/service-role/AWSLambdaBasicExecutionRole"
 }
 
-# Optional: IAM policy for additional logging permissions if enabled
+# Optional extra CloudWatch Logs permissions when verbose logging is enabled
 resource "aws_iam_role_policy" "lambda_additional_permissions" {
   count = var.enable_logging ? 1 : 0
   name  = "${var.name_prefix}-ssm-alerts-additional-permissions"
@@ -143,9 +147,4 @@ resource "aws_iam_role_policy" "lambda_additional_permissions" {
       }
     ]
   })
-}
-
-# Local values
-locals {
-  lambda_function_name = "${var.name_prefix}-ssm-session-alerts"
 }
