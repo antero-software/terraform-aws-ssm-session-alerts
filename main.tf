@@ -51,9 +51,9 @@ resource "aws_cloudwatch_event_rule" "ssm_session_events" {
 
 # EventBridge target to invoke the Lambda
 resource "aws_cloudwatch_event_target" "lambda_target" {
-  rule       = aws_cloudwatch_event_rule.ssm_session_events.name
-  target_id  = "SSMSessionAlertsLambdaTarget"
-  arn        = aws_lambda_function.ssm_alerts.arn
+  rule      = aws_cloudwatch_event_rule.ssm_session_events.name
+  target_id = "SSMSessionAlertsLambdaTarget"
+  arn       = aws_lambda_function.ssm_alerts.arn
 
   depends_on = [aws_lambda_permission.allow_eventbridge]
 }
@@ -71,16 +71,16 @@ resource "aws_lambda_permission" "allow_eventbridge" {
 # Lambda function (Python) - use the manually created ZIP
 resource "aws_lambda_function" "ssm_alerts" {
   # IMPORTANT: point to your manual ZIP inside the module
-  filename         = "${path.module}/src/ssm-alerts-ssm-session-alerts.zip"
+  filename = "${path.module}/src/ssm-alerts-ssm-session-alerts.zip"
   # Ensure updates are detected when you re-zip
   source_code_hash = filebase64sha256("${path.module}/src/ssm-alerts-ssm-session-alerts.zip")
 
-  function_name    = local.lambda_function_name
-  role             = aws_iam_role.lambda_role.arn
-  handler          = "lambda_function.lambda_handler"  # file is lambda_function.py in ZIP root
-  runtime          = "python3.12"
-  timeout          = 30
-  memory_size      = var.lambda_memory_size
+  function_name = local.lambda_function_name
+  role          = aws_iam_role.lambda_role.arn
+  handler       = "main.handler" # file is main.py in ZIP root
+  runtime       = "python3.12"
+  timeout       = 30
+  memory_size   = var.lambda_memory_size
 
   environment {
     variables = {
@@ -107,8 +107,8 @@ resource "aws_iam_role" "lambda_role" {
     Version = "2012-10-17"
     Statement = [
       {
-        Action = "sts:AssumeRole"
-        Effect = "Allow"
+        Action    = "sts:AssumeRole"
+        Effect    = "Allow"
         Principal = { Service = "lambda.amazonaws.com" }
       },
     ]

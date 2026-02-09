@@ -196,7 +196,7 @@ def send_to_slack(payload: dict) -> tuple[int, str]:
         return 599, str(e)
 
 
-def lambda_handler(event, context):
+def handler(event, context):
     log("Received event:", json.dumps(event))
     try:
         payload = build_slack_payload(event)
