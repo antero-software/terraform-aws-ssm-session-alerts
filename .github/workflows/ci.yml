@@ -19,6 +19,13 @@ jobs:
       - name: Terraform fmt
         run: terraform fmt -check -recursive
 
+      - name: Build Lambda ZIP (for validation)
+        run: |
+          mkdir -p src
+          cd src
+          zip -q -X -j ssm-alerts-ssm-session-alerts.zip main.py
+          cd -
+
       - name: Terraform init (module)
         run: |
           terraform init -backend=false
