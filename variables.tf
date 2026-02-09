@@ -6,6 +6,12 @@ variable "name_prefix" {
   default     = "ssm-alerts"
 }
 
+variable "s3_log_bucket_name" {
+  description = "Name of the S3 bucket where SSM session logs are stored. If provided, a link to the session log will be added to the Slack alert."
+  type        = string
+  default     = ""
+}
+
 variable "slack_webhook_url" {
   description = "Slack webhook URL for sending alerts"
   type        = string

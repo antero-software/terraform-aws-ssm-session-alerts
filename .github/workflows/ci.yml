@@ -46,9 +46,9 @@ jobs:
 
       - name: Build Lambda ZIP
         run: |
-          mkdir -p lambda
-          rm -f lambda/ssm-alerts-ssm-session-alerts.zip
-          cd lambda
+          mkdir -p src
+          rm -f src/ssm-alerts-ssm-session-alerts.zip
+          cd src
           zip -q -X -j ssm-alerts-ssm-session-alerts.zip main.py
           cd -
 
@@ -60,7 +60,7 @@ jobs:
           echo "$VERSION_NO_V" > VERSION
           git config user.name "github-actions[bot]"
           git config user.email "github-actions[bot]@users.noreply.github.com"
-          git add VERSION lambda/ssm-alerts-ssm-session-alerts.zip
+          git add VERSION src/ssm-alerts-ssm-session-alerts.zip
           git commit -m "chore: update VERSION to ${VERSION_NO_V} and rebuild lambda zip [skip ci]" || echo "No changes to commit"
           git push
 

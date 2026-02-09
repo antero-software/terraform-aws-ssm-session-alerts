@@ -2,6 +2,7 @@ import json
 import os
 import urllib.request
 import urllib.error
+import urllib.parse
 from datetime import datetime, timezone
 
 
@@ -111,6 +112,20 @@ def build_slack_payload(event: dict) -> dict:
     if event_id != "-" and region != "-":
         console_link = f"https://{region}.console.aws.amazon.com/cloudtrail/home?region={region}#/events/{event_id}"
 
+    # S3 Session Log Link
+    s3_bucket = get_env("S3_LOG_BUCKET_NAME", "").strip()
+    s3_link = None
+    if s3_bucket and region != "-" and session_id != "-":
+        # Assumption: SSM logs are saved as simple keys: "SessionId.log"
+        # If there's a prefix in the bucket (e.g. "logs/"), users might need to include it in the var or we need another var.
+        # Based on user request, we construct the object URL.
+        # User provided example: .../object/BUCKET?prefix=KEY...
+        # We assume Key is f"{session_id}.log"
+        log_key = f"{session_id}.log"
+        encoded_key = urllib.parse.quote(log_key)
+        # Construct the console "object" URL which works to view/download via console
+        s3_link = f"https://{region}.console.aws.amazon.com/s3/object/{s3_bucket}?prefix={encoded_key}&region={region}"
+
     # Fallback text
     fallback = f"{event_name} {user_str} -> {target} ({region}) session={session_id} doc={doc_name} ip={source_ip}"
     if reason and reason != "-":
@@ -139,10 +154,26 @@ def build_slack_payload(event: dict) -> dict:
     if icon_url:
         section_block["accessory"] = {"type": "image", "image_url": icon_url, "alt_text": "icon"}
 
+    # Actions block (buttons)
+    actions = []
+    if s3_link:
+        actions.append({
+            "type": "button",
+            "text": {"type": "plain_text", "text": "View Session Log :memo:"},
+            "url": s3_link
+        })
+    
+    # We can also add the CloudTrail link as a button if we want, but user specifically asked for S3 log button.
+    # Let's check if we want to move CloudTrail link to button or keep as text context.
+    # Keeping CloudTrail in context as before, but adding S3 button in an actions block.
+
     blocks: list[dict] = [
         {"type": "header", "text": {"type": "plain_text", "text": header_text}},
         section_block,
     ]
+
+    if actions:
+        blocks.append({"type": "actions", "elements": actions})
 
     # Divider for visual separation
     blocks.append({"type": "divider"})
