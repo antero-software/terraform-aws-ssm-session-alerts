@@ -52,17 +52,32 @@ jobs:
           zip -q -X -j ssm-alerts-ssm-session-alerts.zip main.py
           cd -
 
-      - name: Update VERSION and push
-        if: steps.tag.outputs.new_tag != ''
+      - name: Commit and Push Changes
         run: |
-          VERSION_NO_V="${{ steps.tag.outputs.new_tag }}"
-          VERSION_NO_V=${VERSION_NO_V#v}
-          echo "$VERSION_NO_V" > VERSION
           git config user.name "github-actions[bot]"
           git config user.email "github-actions[bot]@users.noreply.github.com"
-          git add VERSION src/ssm-alerts-ssm-session-alerts.zip
-          git commit -m "chore: update VERSION to ${VERSION_NO_V} and rebuild lambda zip [skip ci]" || echo "No changes to commit"
-          git push
+
+          # Stage the zip file (it was rebuilt in previous step)
+          git add src/ssm-alerts-ssm-session-alerts.zip
+
+          # Handle Versioning if we have a new tag
+          NEW_TAG="${{ steps.tag.outputs.new_tag }}"
+          if [ -n "$NEW_TAG" ]; then
+            VERSION_NO_V=${NEW_TAG#v}
+            echo "$VERSION_NO_V" > VERSION
+            git add VERSION
+            COMMIT_MSG="chore: update VERSION to ${VERSION_NO_V} and rebuild lambda zip [skip ci]"
+          else
+            COMMIT_MSG="chore: update lambda zip [skip ci]"
+          fi
+
+          # Commit only if there are valid changes
+          if ! git diff --cached --quiet; then
+            git commit -m "$COMMIT_MSG"
+            git push
+          else
+            echo "No changes to commit"
+          fi
 
       - name: Create GitHub Release
         if: steps.tag.outputs.new_tag != ''
