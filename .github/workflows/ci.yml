@@ -50,6 +50,7 @@ jobs:
         uses: mathieudutour/github-tag-action@v6.2
         with:
           github_token: ${{ secrets.GITHUB_TOKEN }}
+          dry_run: true
 
       - name: Build Lambda ZIP
         run: |
@@ -82,6 +83,12 @@ jobs:
           if ! git diff --cached --quiet; then
             git commit -m "$COMMIT_MSG"
             git push
+            
+            # Manually push the tag if it's a new version
+            if [ -n "$NEW_TAG" ]; then
+              git tag $NEW_TAG
+              git push origin $NEW_TAG
+            fi
           else
             echo "No changes to commit"
           fi
